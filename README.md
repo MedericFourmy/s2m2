@@ -1,3 +1,19 @@
+# Fork
+This is a fork of [s2m2](https://github.com/junhong-3dv/s2m2) adding support for PEP 621, `uv`, and adopting a src layout to install `s2m2` package.
+
+## Installation
+uv use is recoomended:   
+```
+uv pip install .
+```
+
+## Setup
+Follow the readme to download weights and run examples. The `pretrained_weights` can alternatively be stored in a different directory by setting the env variable:
+```
+export S2M2_PRETRAINED_WEIGHTS_PATH="/path/to/your/s2m2_pretrain_weights_dir"
+```
+
+
 <div align="center">
 
 <h1>S<sup>2</sup>M<sup>2</sup>: Scalable Stereo Matching Model for Reliable Depth Estimation</h1>
