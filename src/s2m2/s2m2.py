@@ -1,3 +1,7 @@
+import os
+from typing import Union
+from pathlib import Path
+
 import torch
 from torch import Tensor
 import torch.nn as nn
@@ -206,5 +210,36 @@ class S2M2(nn.Module):
         return disp_up, occ_up, conf_up
 
 
+def load_model(
+        pretrain_weights_path: Union[str,Path], 
+        model_type: str, 
+        allow_negative: bool,
+        num_refine: int
+    ) -> S2M2:
+    if model_type == "S":
+        feature_channels = 128
+        n_transformer = 1 * 1
+    elif model_type == "M":
+        feature_channels = 192
+        n_transformer = 1 * 2
+    elif model_type == "L":
+        feature_channels = 256
+        n_transformer = 1 * 3
+    elif model_type == "XL":
+        feature_channels = 384
+        n_transformer = 1*3
+    else:
+        raise ValueError("model type should be one of [S, M, L, XL]")
 
+    model_path = 'CH' + str(feature_channels) + 'NTR' + str(n_transformer) + '.pth'
+    ckpt_path = os.path.join(pretrain_weights_path, model_path)
 
+    model = S2M2(feature_channels=feature_channels,
+                  dim_expansion=1,
+                  num_transformer=n_transformer,
+                  use_positivity=not allow_negative,
+                  refine_iter=num_refine
+                  )
+    checkpoint = torch.load(ckpt_path, weights_only=True)
+    model.my_load_state_dict(checkpoint['state_dict'])
+    return model

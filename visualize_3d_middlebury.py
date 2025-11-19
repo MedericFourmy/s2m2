@@ -1,16 +1,18 @@
-import torch
+import os
+import math
+import argparse
 import warnings
 warnings.filterwarnings("ignore")
-import numpy as np
-# import re
+
 import cv2
-import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+import torch
 import torch.nn.functional as F
-from model.s2m2 import S2M2 as Model
+import numpy as np
 import open3d as o3d
-import argparse
-import math
+
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+from s2m2.s2m2 import load_model
+from s2m2.config import S2M2_PRETRAINED_WEIGHTS_PATH
 
 
 device='cuda'
@@ -32,40 +34,6 @@ def get_args_parser():
                         help='number of local iterative refinement')
     parser.add_argument('--torch_compile', action='store_true', help='torch_compile')
     return parser
-
-
-def load_model(args):
-
-    if args.model_type == "S":
-        feature_channels = 128
-        n_transformer = 1 * 1
-    elif args.model_type == "M":
-        feature_channels = 192
-        n_transformer = 1 * 2
-    elif args.model_type == "L":
-        feature_channels = 256
-        n_transformer = 1 * 3
-    elif args.model_type == "XL":
-        feature_channels = 384
-        n_transformer = 1*3
-    else:
-        print('model type should be one of [S, M, L, XL]')
-        exit(1)
-
-
-    model_path = 'CH' + str(feature_channels) + 'NTR' + str(n_transformer) + '.pth'
-    ckpt_path = os.path.join('pretrain_weights', model_path)
-
-    model = Model(feature_channels=feature_channels,
-                  dim_expansion=1,
-                  num_transformer=n_transformer,
-                  use_positivity=True,
-                  refine_iter=args.num_refine
-                  )
-    checkpoint = torch.load(ckpt_path, weights_only=True)
-    model.my_load_state_dict(checkpoint['state_dict'])
-    return model
-
 
 
 def get_pointcloud(rgb, disp, calib):
@@ -180,10 +148,15 @@ def main(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f'device: {device}')
 
-    model = load_model(args).to(device).eval()
+    model = load_model(
+        S2M2_PRETRAINED_WEIGHTS_PATH,
+        args.model_type,
+        args.allow_negative,
+        args.num_refine,
+        ).to(device).eval()
+    
     if args.torch_compile:
         model = torch.compile(model)
-
 
     left_path = 'samples/Bicycle2/im0.png'
     right_path = 'samples/Bicycle2/im1.png'

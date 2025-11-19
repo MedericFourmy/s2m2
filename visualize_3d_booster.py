@@ -1,16 +1,18 @@
-import torch
+import os
+import math
+import argparse
 import warnings
 warnings.filterwarnings("ignore")
-import numpy as np
-# import re
+
 import cv2
-import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+import torch
 import torch.nn.functional as F
-from model.s2m2 import S2M2 as Model
+import numpy as np
 import open3d as o3d
-import argparse
-import math
+
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+from s2m2.s2m2 import load_model
+from s2m2.config import S2M2_PRETRAINED_WEIGHTS_PATH
 
 
 device='cuda'
@@ -26,46 +28,13 @@ np.random.seed(0)
 def get_args_parser():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_type', default='XL', type=str,
+    parser.add_argument('--model_type', default='S', type=str,
                         help='select model type: S,M,L,XL')
     parser.add_argument('--num_refine', default=3, type=int,
                         help='number of local iterative refinement')
     parser.add_argument('--torch_compile', action='store_true', help='torch_compile')
+    parser.add_argument('--allow_negative', action='store_true', help='allow negative disparity for imperfect rectification')
     return parser
-
-
-def load_model(args):
-
-    if args.model_type == "S":
-        feature_channels = 128
-        n_transformer = 1 * 1
-    elif args.model_type == "M":
-        feature_channels = 192
-        n_transformer = 1 * 2
-    elif args.model_type == "L":
-        feature_channels = 256
-        n_transformer = 1 * 3
-    elif args.model_type == "XL":
-        feature_channels = 384
-        n_transformer = 1*3
-    else:
-        print('model type should be one of [S, M, L, XL]')
-        exit(1)
-
-
-    model_path = 'CH' + str(feature_channels) + 'NTR' + str(n_transformer) + '.pth'
-    ckpt_path = os.path.join('pretrain_weights', model_path)
-
-    model = Model(feature_channels=feature_channels,
-                  dim_expansion=1,
-                  num_transformer=n_transformer,
-                  use_positivity=True,
-                  refine_iter=args.num_refine
-                  )
-    checkpoint = torch.load(ckpt_path, weights_only=True)
-    model.my_load_state_dict(checkpoint['state_dict'])
-    return model
-
 
 
 def get_pointcloud(rgb, disp, calib):
@@ -110,13 +79,15 @@ def image_pad(img, factor):
 
         pad_h = H_new - H
         pad_w = W_new - W
-
+        
+        # Pad horizontally
         p2d = (pad_w//2, pad_w-pad_w//2, 0, 0)
         img_pad = F.pad(img, p2d, "constant", 0)
-        #
+        # Pad vertically
         p2d = (0,0, pad_h // 2, pad_h - pad_h // 2)
         img_pad = F.pad(img_pad, p2d, "constant", 0)
 
+        # downsample and upsample to reduce the padding effect
         img_pad_down = F.adaptive_avg_pool2d(img_pad, output_size=[H // factor, W // factor])
         img_pad = F.interpolate(img_pad_down, size=[H_new, W_new], mode='bilinear')
 
@@ -174,7 +145,12 @@ def main(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f'device: {device}')
 
-    model = load_model(args).to(device).eval()
+    model = load_model(
+        S2M2_PRETRAINED_WEIGHTS_PATH,
+        args.model_type,
+        args.allow_negative,
+        args.num_refine,
+        ).to(device).eval()    
     if args.torch_compile:
         model = torch.compile(model)
 
@@ -195,9 +171,9 @@ def main(args):
     left_torch = (torch.from_numpy(left).permute(-1, 0, 1).unsqueeze(0)).half().to(device)
     right_torch = (torch.from_numpy(right).permute(-1, 0, 1).unsqueeze(0)).half().to(device)
 
+    # pad images with smooth padding
     left_torch_pad = image_pad(left_torch, 32)
     right_torch_pad = image_pad(right_torch, 32)
-
 
     img_height, img_width = left.shape[:2]
     print(f"original image size: {img_height}, {img_width}")
@@ -221,10 +197,10 @@ def main(args):
 
     print(F"torch avg inference time:{(curr_time)/T/1000}, FPS:{1000*T/(curr_time)}")
 
+    # Remove padding
     pred_disp = image_crop(pred_disp, (img_height, img_width))
     pred_occ = image_crop(pred_occ, (img_height, img_width))
     pred_conf = image_crop(pred_conf, (img_height, img_width))
-
 
     # opencv 2D visualization
     valid = (((pred_conf).cpu().float() >.1)*((pred_occ).cpu().float() >.01)).squeeze().numpy()
