@@ -1,0 +1,6 @@
+build/
+**/__pycache__/
+**/s2m2.egg-info/
+
+pretrain_weights/
+vis/
