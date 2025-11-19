@@ -5,12 +5,16 @@ description = "s2m2 stereo depth estimation"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "onnxruntime-gpu>=1.23.2",
     "torch<2.8",
 ]
 
 [project.optional-dependencies]
 examples = [
     "numpy>=2.2.6",
+    "onnx>=1.19.1",
+    "onnxruntime>=1.23.2",
+    "onnxruntime-gpu>=1.23.2",
     "open3d>=0.19.0",
     "opencv-python>=4.11.0.86",
 ]

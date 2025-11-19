@@ -5,56 +5,27 @@ import cv2
 import torch
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-from s2m2.s2m2 import S2M2 as Model
+from s2m2.s2m2 import load_model
+from s2m2.config import S2M2_PRETRAINED_WEIGHTS_PATH
 torch.backends.cudnn.benchmark = True
 torch.set_float32_matmul_precision('high')
 
 def get_args_parser():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_type', default='S', type=str,
+    parser.add_argument('--model_type', default='XL', type=str,
                         help='select model type: S,M,L,XL')
     parser.add_argument('--num_refine', default=3, type=int,
                         help='number of local iterative refinement')
     parser.add_argument('--torch_compile', action='store_true', help='apply torch_compile')
     parser.add_argument('--allow_negative', action='store_true', help='allow negative disparity for imperfect rectification')
-    parser.add_argument('--img_height', default=768, type=int,
+    parser.add_argument('--img_height', default=800, type=int,
                         help='image height')
-    parser.add_argument('--img_width', default=1024, type=int,
+    parser.add_argument('--img_width', default=1088, type=int,
                         help='image width')
+    parser.add_argument('--nb_runs', default=1, type=int)
     return parser
 
-def load_model(args):
-
-    if args.model_type == "S":
-        feature_channels = 128
-        n_transformer = 1 * 1
-    elif args.model_type == "M":
-        feature_channels = 192
-        n_transformer = 1 * 2
-    elif args.model_type == "L":
-        feature_channels = 256
-        n_transformer = 1 * 3
-    elif args.model_type == "XL":
-        feature_channels = 384
-        n_transformer = 1*3
-    else:
-        print('model type should be one of [S, M, L, XL]')
-        exit(1)
-
-
-    model_path = 'CH' + str(feature_channels) + 'NTR' + str(n_transformer) + '.pth'
-    ckpt_path = os.path.join('pretrain_weights', model_path)
-
-    model = Model(feature_channels=feature_channels,
-                  dim_expansion=1,
-                  num_transformer=n_transformer,
-                  use_positivity=not args.allow_negative,
-                  refine_iter=args.num_refine
-                  )
-    checkpoint = torch.load(ckpt_path, weights_only=True)
-    model.my_load_state_dict(checkpoint['state_dict'])
-    return model
 
 def main(args):
     torch.manual_seed(0)
@@ -64,10 +35,12 @@ def main(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f'device: {device}')
 
-    model = load_model(args).to(device).eval()
-    if args.torch_compile:
-        model = torch.compile(model)
-
+    model = load_model(
+        S2M2_PRETRAINED_WEIGHTS_PATH,
+        args.model_type,
+        args.allow_negative,
+        args.num_refine,
+    ).to(device).eval()
 
     if args.allow_negative:
         left_path = 'samples/Web/64648_pbz98_3D_MPO_70pc_L.jpg'
@@ -103,23 +76,23 @@ def main(args):
 
     # load and test run
     model = torch.export.load(ep_path).module()
-    # model = torch.compile(model)
+    if args.torch_compile:
+        model = torch.compile(model)
     with torch.no_grad():
         with torch.amp.autocast(enabled=True, device_type=device.type, dtype=torch.float16):
             print(f"pre-run...")
             _ = model(left_torch, right_torch)
             print(f"main-run...")
-            T = 1
             starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
             starter.record()
-            for _ in range(T):
+            for _ in range(args.nb_runs):
                 pred_disp, pred_occ, pred_conf = model(left_torch, right_torch)
                 ender.record()
                 # WAIT FOR GPU SYNC
                 torch.cuda.synchronize()
             curr_time = starter.elapsed_time(ender)
 
-    print(F"torch avg inference time:{(curr_time)/T/1000}, FPS:{1000*T/(curr_time)}")
+    print(F"torch avg inference time:{(curr_time)/args.nb_runs/1000}, FPS:{1000*args.nb_runs/(curr_time)}")
     #
     # opencv 2D visualization
     valid = ((pred_conf.cpu().float() >.1)).squeeze().numpy()

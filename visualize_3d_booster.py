@@ -34,6 +34,7 @@ def get_args_parser():
                         help='number of local iterative refinement')
     parser.add_argument('--torch_compile', action='store_true', help='torch_compile')
     parser.add_argument('--allow_negative', action='store_true', help='allow negative disparity for imperfect rectification')
+    parser.add_argument('--nb_runs', default=1, type=int)
     return parser
 
 
@@ -150,10 +151,10 @@ def main(args):
         args.model_type,
         args.allow_negative,
         args.num_refine,
-        ).to(device).eval()    
+    ).to(device).eval()    
+    
     if args.torch_compile:
         model = torch.compile(model)
-
 
     left_path = 'samples/Lid/im0.png'
     right_path = 'samples/Lid/im1.png'
@@ -185,17 +186,16 @@ def main(args):
         with torch.amp.autocast(enabled=True, device_type=device.type, dtype=torch.float16):
             print(f"pre-run...")
             _ = model(left_torch_pad, right_torch_pad)
-            T = 1
             starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
             starter.record()
-            for _ in range(T):
+            for _ in range(args.nb_runs):
                 pred_disp, pred_occ, pred_conf = model(left_torch_pad, right_torch_pad)
                 ender.record()
                 # WAIT FOR GPU SYNC
                 torch.cuda.synchronize()
             curr_time = starter.elapsed_time(ender)
 
-    print(F"torch avg inference time:{(curr_time)/T/1000}, FPS:{1000*T/(curr_time)}")
+    print(F"torch avg inference time:{(curr_time)/args.nb_runs/1000}, FPS:{1000*args.nb_runs/(curr_time)}")
 
     # Remove padding
     pred_disp = image_crop(pred_disp, (img_height, img_width))

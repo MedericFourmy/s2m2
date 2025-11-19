@@ -14,12 +14,13 @@ torch.set_float32_matmul_precision('high')
 def get_args_parser():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_type', default='S', type=str,
+    parser.add_argument('--model_type', default='XL', type=str,
                         help='select model type: S,M,L,XL')
     parser.add_argument('--num_refine', default=3, type=int,
                         help='number of local iterative refinement')
     parser.add_argument('--torch_compile', action='store_true', help='apply torch_compile')
     parser.add_argument('--allow_negative', action='store_true', help='allow negative disparity for imperfect rectification')
+    parser.add_argument('--nb_runs', default=1, type=int)
     return parser
 
 
@@ -35,7 +36,8 @@ def main(args):
         args.model_type,
         args.allow_negative,
         args.num_refine,
-        ).to(device).eval()
+    ).to(device).eval()
+    
     if args.torch_compile:
         model = torch.compile(model)
 
@@ -78,17 +80,16 @@ def main(args):
         with torch.amp.autocast(enabled=True, device_type=device.type, dtype=torch.float16):
             print(f"pre-run...")
             _ = model(left_torch, right_torch)
-            T = 1
             starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
             starter.record()
-            for _ in range(T):
+            for _ in range(args.nb_runs):
                 pred_disp, pred_occ, pred_conf = model(left_torch, right_torch)
                 ender.record()
                 # WAIT FOR GPU SYNC
                 torch.cuda.synchronize()
             curr_time = starter.elapsed_time(ender)
 
-    print(F"torch avg inference time:{(curr_time)/T/1000}, FPS:{1000*T/(curr_time)}")
+    print(F"torch avg inference time:{(curr_time)/args.nb_runs/1000}, FPS:{1000*args.nb_runs/(curr_time)}")
 
     # opencv 2D visualization
     valid = ((pred_conf.cpu().float() >.1)).squeeze().numpy()

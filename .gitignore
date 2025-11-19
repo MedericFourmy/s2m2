@@ -4,3 +4,5 @@ build/
 
 pretrain_weights/
 vis/
+torchscript_save/
+onnx_save/
