@@ -33,6 +33,7 @@ def get_args_parser():
     parser.add_argument('--num_refine', default=5, type=int,
                         help='number of local iterative refinement')
     parser.add_argument('--torch_compile', action='store_true', help='torch_compile')
+    parser.add_argument('--allow_negative', action='store_true', help='allow negative disparity for imperfect rectification')
     return parser
 
 
