@@ -5,7 +5,7 @@ import cv2
 import torch
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-from model.s2m2 import S2M2 as Model
+from s2m2.s2m2 import S2M2 as Model
 torch.backends.cudnn.benchmark = True
 torch.set_float32_matmul_precision('high')
 
