@@ -5,7 +5,6 @@ description = "s2m2 stereo depth estimation"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "onnxruntime-gpu>=1.23.2",
     "torch<2.8",
 ]
 

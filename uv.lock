@@ -1916,7 +1916,6 @@ name = "s2m2"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "onnxruntime-gpu" },
     { name = "torch" },
 ]
 
@@ -1936,7 +1935,6 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'examples'", specifier = ">=2.2.6" },
     { name = "onnx", marker = "extra == 'examples'", specifier = ">=1.19.1" },
     { name = "onnxruntime", marker = "extra == 'examples'", specifier = ">=1.23.2" },
-    { name = "onnxruntime-gpu", specifier = ">=1.23.2" },
     { name = "onnxruntime-gpu", marker = "extra == 'examples'", specifier = ">=1.23.2" },
     { name = "open3d", marker = "extra == 'examples'", specifier = ">=0.19.0" },
     { name = "opencv-python", marker = "extra == 'examples'", specifier = ">=4.11.0.86" },

@@ -155,7 +155,7 @@ def main(args):
         args.model_type,
         args.allow_negative,
         args.num_refine,
-        ).to(device).eval()
+    ).to(device).eval()
     
     if args.torch_compile:
         model = torch.compile(model)
